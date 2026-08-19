@@ -26,6 +26,13 @@ Grafana is available at <http://localhost:3000> (`admin` / `admin`). Its
 is also exposed over HTTP at <http://localhost:8123> and through its native
 protocol on port `9000`.
 
+The provisioned `Finfree` folder contains two dashboards:
+
+- **Market Overview** shows the latest market snapshot, breadth, traded value,
+  and top movers.
+- **Symbol Detail** provides a symbol selector, price and return statistics,
+  and an OHLCV chart.
+
 The local defaults can be overridden with `GRAFANA_ADMIN_USER`,
 `GRAFANA_ADMIN_PASSWORD`, `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, and
 `CLICKHOUSE_PASSWORD` environment variables.

@@ -1,0 +1,604 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "A compact view of market direction, breadth, activity, and leading movers.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Open Symbol Detail",
+      "tooltip": "Inspect an individual symbol",
+      "type": "link",
+      "url": "/d/finfree-symbol/symbol-detail"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Latest session within the selected range. Return is equal-weighted across symbols; traded value is close × volume.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "text"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "active_symbols"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Active symbols"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "equal_weight_return"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Equal-weight return"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traded_value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Traded value (IRR)"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "net_breadth"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Net breadth"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "table",
+          "rawSql": "WITH daily AS (\n  SELECT symbol, date, argMax(close, ingested_at) AS close, argMax(volume, ingested_at) AS volume\n  FROM market_data\n  WHERE $__dateFilter(date)\n  GROUP BY symbol, date\n), latest AS (\n  SELECT max(date) AS latest_date FROM daily\n), snapshot AS (\n  SELECT\n    symbol,\n    argMax(close, date) AS latest_close,\n    argMaxIf(close, date, date < (SELECT latest_date FROM latest)) AS previous_close,\n    argMax(volume, date) AS latest_volume\n  FROM daily\n  GROUP BY symbol\n)\nSELECT\n  count() AS active_symbols,\n  round(avgIf((latest_close / previous_close - 1) * 100, previous_close > 0), 2) AS equal_weight_return,\n  round(sum(toFloat64(latest_close) * latest_volume), 0) AS traded_value,\n  countIf(latest_close > previous_close) - countIf(latest_close < previous_close) AS net_breadth\nFROM snapshot",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Market Snapshot",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Share of symbols closing above or below their previous available close.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "advancers"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "decliners"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "timeseries",
+          "rawSql": "WITH daily AS (\n  SELECT symbol, date, argMax(close, ingested_at) AS close\n  FROM market_data\n  WHERE $__dateFilter(date)\n  GROUP BY symbol, date\n), returns AS (\n  SELECT\n    symbol,\n    date,\n    close,\n    lagInFrame(close, 1, 0) OVER (PARTITION BY symbol ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS previous_close\n  FROM daily\n)\nSELECT\n  toDateTime(date) AS time,\n  round(100 * countIf(close > previous_close) / countIf(previous_close > 0), 2) AS advancers,\n  round(100 * countIf(close < previous_close) / countIf(previous_close > 0), 2) AS decliners\nFROM returns\nGROUP BY date\nHAVING countIf(previous_close > 0) > 0\nORDER BY date",
+          "refId": "A"
+        }
+      ],
+      "title": "Market Breadth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Daily aggregate of closing price × volume across all active symbols.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "IRR",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "timeseries",
+          "rawSql": "WITH daily AS (\n  SELECT symbol, date, argMax(close, ingested_at) AS close, argMax(volume, ingested_at) AS volume\n  FROM market_data\n  WHERE $__dateFilter(date)\n  GROUP BY symbol, date\n)\nSELECT\n  toDateTime(date) AS time,\n  sum(toFloat64(close) * volume) AS traded_value\nFROM daily\nGROUP BY date\nORDER BY date",
+          "refId": "A"
+        }
+      ],
+      "title": "Aggregate Traded Value",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Largest absolute moves in the latest session within the selected range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "symbol"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Symbol"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open symbol detail",
+                    "url": "/d/finfree-symbol/symbol-detail?var-symbol=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Name"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "close"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Close"
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "change_percent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Change"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "volume"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Volume"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traded_value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Traded value (IRR)"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "table",
+          "rawSql": "WITH daily AS (\n  SELECT\n    symbol,\n    date,\n    argMax(name, ingested_at) AS name,\n    argMax(close, ingested_at) AS close,\n    argMax(volume, ingested_at) AS volume\n  FROM market_data\n  WHERE $__dateFilter(date)\n  GROUP BY symbol, date\n), latest AS (\n  SELECT max(date) AS latest_date FROM daily\n), snapshot AS (\n  SELECT\n    symbol,\n    argMax(name, date) AS name,\n    argMax(close, date) AS latest_close,\n    argMaxIf(close, date, date < (SELECT latest_date FROM latest)) AS previous_close,\n    argMax(volume, date) AS latest_volume\n  FROM daily\n  GROUP BY symbol\n)\nSELECT\n  symbol,\n  name,\n  latest_close AS close,\n  round((latest_close / previous_close - 1) * 100, 2) AS change_percent,\n  latest_volume AS volume,\n  round(toFloat64(latest_close) * latest_volume, 0) AS traded_value\nFROM snapshot\nWHERE previous_close > 0\nORDER BY abs(change_percent) DESC\nLIMIT 15",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Movers",
+      "type": "table"
+    }
+  ],
+  "refresh": false,
+  "schemaVersion": 42,
+  "tags": [
+    "finfree",
+    "market"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Market Overview",
+  "uid": "finfree-market",
+  "version": 1,
+  "weekStart": ""
+}

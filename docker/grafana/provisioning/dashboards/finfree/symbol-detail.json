@@ -1,0 +1,440 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Price, return, and activity detail for one TSETMC symbol.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "arrow-left",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Back to Market Overview",
+      "tooltip": "Open the overall market dashboard",
+      "type": "link",
+      "url": "/d/finfree-market/market-overview"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Latest close, latest daily change, selected-range return, and average daily traded value.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "text"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_close"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest close"
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "daily_change"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Daily change"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "period_return"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Range return"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "average_traded_value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Avg traded value (IRR)"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "table",
+          "rawSql": "WITH daily AS (\n  SELECT\n    date,\n    argMax(close, ingested_at) AS close,\n    argMax(volume, ingested_at) AS volume\n  FROM market_data\n  WHERE symbol = ${symbol:singlequote} AND $__dateFilter(date)\n  GROUP BY date\n), latest AS (\n  SELECT max(date) AS latest_date FROM daily\n)\nSELECT\n  argMax(close, date) AS latest_close,\n  round((argMax(close, date) / argMaxIf(close, date, date < (SELECT latest_date FROM latest)) - 1) * 100, 2) AS daily_change,\n  round((argMax(close, date) / argMin(close, date) - 1) * 100, 2) AS period_return,\n  round(avg(toFloat64(close) * volume), 0) AS average_traded_value\nFROM daily",
+          "refId": "A"
+        }
+      ],
+      "title": "$symbol Snapshot",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Daily open, high, low, close, and volume for the selected symbol.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 2,
+      "options": {
+        "candleStyle": "candles",
+        "colorStrategy": "open-close",
+        "colors": {
+          "down": "red",
+          "up": "green"
+        },
+        "fields": {
+          "close": "Close",
+          "high": "High",
+          "low": "Low",
+          "open": "Open",
+          "volume": "Volume"
+        },
+        "includeAllFields": false,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mode": "candles+volume",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "timeseries",
+          "rawSql": "SELECT\n  toDateTime(date) AS time,\n  argMax(open, ingested_at) AS Open,\n  argMax(high, ingested_at) AS High,\n  argMax(low, ingested_at) AS Low,\n  argMax(close, ingested_at) AS Close,\n  argMax(volume, ingested_at) AS Volume\nFROM market_data\nWHERE symbol = ${symbol:singlequote} AND $__dateFilter(date)\nGROUP BY date\nORDER BY date",
+          "refId": "A"
+        }
+      ],
+      "title": "$symbol Price & Volume",
+      "type": "candlestick"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Close-to-close percentage return for each available session.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisCenteredZero": true,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.20.0",
+          "queryType": "timeseries",
+          "rawSql": "WITH daily AS (\n  SELECT date, argMax(close, ingested_at) AS close\n  FROM market_data\n  WHERE symbol = ${symbol:singlequote} AND $__dateFilter(date)\n  GROUP BY date\n), returns AS (\n  SELECT\n    date,\n    close,\n    lagInFrame(close, 1, 0) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS previous_close\n  FROM daily\n)\nSELECT\n  toDateTime(date) AS time,\n  round((close / previous_close - 1) * 100, 2) AS daily_return\nFROM returns\nWHERE previous_close > 0\nORDER BY date",
+          "refId": "A"
+        }
+      ],
+      "title": "$symbol Daily Return",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": false,
+  "schemaVersion": 42,
+  "tags": [
+    "finfree",
+    "symbol"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT symbol FROM market_data ORDER BY symbol",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Symbol",
+        "multi": false,
+        "name": "symbol",
+        "options": [],
+        "query": "SELECT DISTINCT symbol FROM market_data ORDER BY symbol",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Symbol Detail",
+  "uid": "finfree-symbol",
+  "version": 1,
+  "weekStart": ""
+}
