@@ -1,0 +1,43 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.7.4.58
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-finfree}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-grafana}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-grafana}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - clickhouse-client --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD" --query "SELECT 1"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:13.2.0
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PLUGINS_PREINSTALL: grafana-clickhouse-datasource@4.20.0
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-finfree}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-grafana}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-grafana}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  clickhouse-data:
+  grafana-data:
