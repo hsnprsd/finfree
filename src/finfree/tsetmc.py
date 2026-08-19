@@ -10,6 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import gzip
 import json
 from typing import Any, Callable, Literal
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,19 @@ from urllib.request import Request, urlopen
 
 
 BASE_URL = "https://cdn.tsetmc.com/api"
+MARKET_WATCH_URL = (
+    "https://old.tsetmc.com/tsev2/data/MarketWatchInit.aspx?h=0&r=0"
+)
+_FARSI_NORMALIZATION = str.maketrans("يك", "یک")
+_HEADERS = {
+    "Accept": "application/json,text/plain,*/*",
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "Chrome/126 Safari/537.36"
+    ),
+    "Referer": "https://www.tsetmc.com/",
+    "Origin": "https://www.tsetmc.com",
+}
 Timeframe = Literal["1d", "1w", "1mo"]
 
 
@@ -39,7 +53,18 @@ class Candle:
     trades: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class Instrument:
+    """A TSETMC instrument returned by the market watch."""
+
+    instrument_id: str
+    symbol: str
+    name: str = ""
+    flow: int | None = None
+
+
 Transport = Callable[[str], dict[str, Any]]
+TextTransport = Callable[[str], str]
 
 
 class TSETMCClient:
@@ -49,9 +74,16 @@ class TSETMCClient:
     HTTP client. It receives the complete URL and must return decoded JSON.
     """
 
-    def __init__(self, *, timeout: float = 20.0, transport: Transport | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = 20.0,
+        transport: Transport | None = None,
+        text_transport: TextTransport | None = None,
+    ) -> None:
         self.timeout = timeout
         self._transport = transport or self._get_json
+        self._text_transport = text_transport or self._get_text
 
     def read_market_data(
         self,
@@ -68,20 +100,41 @@ class TSETMCClient:
         TSETMC's available history is returned. The returned list is ordered from
         oldest to newest.
         """
-        clean_symbol = symbol.strip()
-        if not clean_symbol:
-            raise ValueError("symbol must not be empty")
-        if timeframe not in {"1d", "1w", "1mo"}:
-            raise ValueError("timeframe must be one of: '1d', '1w', '1mo'")
-
-        start_date = _as_date(start, "start")
-        end_date = _as_date(end, "end")
-        if start_date and end_date and start_date > end_date:
-            raise ValueError("start must be on or before end")
-
+        clean_symbol, start_date, end_date = _validate_request(symbol, timeframe, start, end)
         instrument_id = self._resolve_instrument(clean_symbol)
+        return self.read_market_data_by_id(
+            instrument_id,
+            clean_symbol,
+            timeframe,
+            start=start_date,
+            end=end_date,
+        )
+
+    def list_instruments(self) -> list[Instrument]:
+        """Return the instruments currently exposed by TSETMC market watch."""
+        instruments = _instruments_from_market_watch(
+            self._text_transport(MARKET_WATCH_URL)
+        )
+        if not instruments:
+            raise TSETMCError("TSETMC market watch did not contain any instruments")
+        return sorted(instruments.values(), key=lambda item: (item.symbol, item.instrument_id))
+
+    def read_market_data_by_id(
+        self,
+        instrument_id: str | int,
+        symbol: str,
+        timeframe: Timeframe = "1d",
+        *,
+        start: date | datetime | str | None = None,
+        end: date | datetime | str | None = None,
+    ) -> list[Candle]:
+        """Return candles for a known TSETMC instrument id without searching."""
+        clean_symbol, start_date, end_date = _validate_request(symbol, timeframe, start, end)
+        clean_id = str(instrument_id).strip()
+        if not clean_id.isdigit():
+            raise ValueError("instrument_id must contain only digits")
         raw = self._transport(
-            f"{BASE_URL}/ClosingPrice/GetClosingPriceDailyList/{instrument_id}/0"
+            f"{BASE_URL}/ClosingPrice/GetClosingPriceDailyList/{clean_id}/0"
         )
         candles = [
             _candle_from_record(clean_symbol, record)
@@ -115,11 +168,23 @@ class TSETMCClient:
         return str(instrument_id)
 
     def _get_json(self, url: str) -> dict[str, Any]:
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "finfree/0.1"})
+        request = Request(url, headers=_HEADERS)
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 return json.load(response)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise TSETMCError(f"TSETMC request failed: {url}") from exc
+
+    def _get_text(self, url: str) -> str:
+        request = Request(url, headers=_HEADERS)
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                content = response.read()
+                if response.headers.get("Content-Encoding") == "gzip" or content.startswith(b"\x1f\x8b"):
+                    content = gzip.decompress(content)
+                charset = response.headers.get_content_charset() or "utf-8"
+                return content.decode(charset).translate(_FARSI_NORMALIZATION)
+        except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, gzip.BadGzipFile) as exc:
             raise TSETMCError(f"TSETMC request failed: {url}") from exc
 
 
@@ -152,12 +217,53 @@ def _as_date(value: date | datetime | str | None, name: str) -> date | None:
     raise TypeError(f"{name} must be a date, datetime, ISO date string, or None")
 
 
+def _validate_request(
+    symbol: str,
+    timeframe: Timeframe,
+    start: date | datetime | str | None,
+    end: date | datetime | str | None,
+) -> tuple[str, date | None, date | None]:
+    clean_symbol = symbol.strip()
+    if not clean_symbol:
+        raise ValueError("symbol must not be empty")
+    if timeframe not in {"1d", "1w", "1mo"}:
+        raise ValueError("timeframe must be one of: '1d', '1w', '1mo'")
+
+    start_date = _as_date(start, "start")
+    end_date = _as_date(end, "end")
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start must be on or before end")
+    return clean_symbol, start_date, end_date
+
+
 def _daily_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
     for key in ("closingPriceDaily", "closingPriceDailyList", "data"):
         records = payload.get(key)
         if isinstance(records, list):
             return records
     raise TSETMCError("TSETMC response did not contain daily price records")
+
+
+def _instruments_from_market_watch(payload: str) -> dict[str, Instrument]:
+    parts = payload.split("@")
+    if len(parts) != 5:
+        raise TSETMCError("TSETMC returned a malformed market watch")
+
+    instruments: dict[str, Instrument] = {}
+    for raw_record in parts[2].split(";"):
+        fields = raw_record.split(",")
+        if len(fields) < 18:
+            continue
+        instrument_id, symbol, name = fields[0].strip(), fields[2].strip(), fields[3].strip()
+        if not instrument_id.isdigit() or not symbol or any(char.isdigit() for char in symbol):
+            continue
+        instruments[instrument_id] = Instrument(
+            instrument_id=instrument_id,
+            symbol=symbol,
+            name=name,
+            flow=_safe_optional_int(fields[17]),
+        )
+    return instruments
 
 
 def _candle_from_record(symbol: str, record: dict[str, Any]) -> Candle:
@@ -186,6 +292,13 @@ def _tsetmc_date(value: Any) -> date:
 
 def _optional_int(value: Any) -> int | None:
     return None if value is None else int(value)
+
+
+def _safe_optional_int(value: Any) -> int | None:
+    try:
+        return _optional_int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _deduplicate_and_sort(candles: list[Candle]) -> list[Candle]:

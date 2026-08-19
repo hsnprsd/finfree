@@ -29,3 +29,21 @@ protocol on port `9000`.
 The local defaults can be overridden with `GRAFANA_ADMIN_USER`,
 `GRAFANA_ADMIN_PASSWORD`, `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, and
 `CLICKHOUSE_PASSWORD` environment variables.
+
+## Importing TSETMC history
+
+The ingestion script discovers the instruments in TSETMC's current market
+watch, downloads their complete daily history, and writes it to
+`finfree.market_data`. Symbols containing numbers are excluded:
+
+```sh
+uv run --extra ingest finfree-ingest
+```
+
+Use `--start YYYY-MM-DD` or `--end YYYY-MM-DD` to restrict the rows written.
+The script processes requests sequentially, retries transient failures, and
+reports any symbols it could not ingest. It exits non-zero if any symbol fails.
+
+ClickHouse connection settings use the same `CLICKHOUSE_DB`, `CLICKHOUSE_USER`,
+and `CLICKHOUSE_PASSWORD` variables as Compose. `CLICKHOUSE_URL` defaults to
+`http://localhost:8123`, and `CLICKHOUSE_TABLE` defaults to `market_data`.

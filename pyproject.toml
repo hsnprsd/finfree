@@ -1,3 +1,23 @@
+[project]
+name = "finfree"
+version = "0.1.0"
+description = "Access and store historical market data published by TSETMC"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+ingest = [
+    "clickhouse-connect>=1.6.0,<2",
+]
+
+[project.scripts]
+finfree-ingest = "finfree.ingest:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

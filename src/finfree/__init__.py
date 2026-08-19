@@ -1,5 +1,5 @@
 """Finfree market-data clients."""
 
-from .tsetmc import Candle, TSETMCClient, TSETMCError, read_market_data
+from .tsetmc import Candle, Instrument, TSETMCClient, TSETMCError, read_market_data
 
-__all__ = ["Candle", "TSETMCClient", "TSETMCError", "read_market_data"]
+__all__ = ["Candle", "Instrument", "TSETMCClient", "TSETMCError", "read_market_data"]
